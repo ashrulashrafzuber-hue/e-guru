@@ -549,21 +549,25 @@ function AdminPanel({ user, db, appId, teachers, schedules, kelasGanti, ketiadaa
   const [uploadMethod, setUploadMethod] = useState('pdf'); // 'pdf' | 'text'
   const [manualText, setManualText] = useState('');
 
-  // --- KOD AI GEMINI YANG DIKONGSI BERSAMA (PDF & TEKS) ---
+  // --- KOD AI GEMINI YANG DIKONGSI BERSAMA (PDF & TEKS) DENGAN SISTEM AUTO-FALLBACK ---
   const processWithAI = async (textToProcess) => {
     setIsProcessing(true);
     setErrorMsg('');
     setParseResult(null);
 
     try {
-      // --- AUTODETECT PERSEKITARAN SECARA SELAMAT ---
+      // 1. Kenal pasti jika ia berada dalam Vercel atau Canvas
       let isPreviewEnv = false;
       try {
         if (typeof __app_id !== 'undefined') isPreviewEnv = true;
       } catch(e) {}
       
       const apiKey = isPreviewEnv ? "" : "AIzaSyAbyj3Kkvw_zaWBUYbpN0DPIA0XO2oBNsk"; 
-      const modelName = isPreviewEnv ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+      
+      // 2. Senarai model untuk diuji. Jika satu gagal, ia akan beralih ke model seterusnya.
+      const modelsToTry = isPreviewEnv 
+        ? ["gemini-2.5-flash-preview-09-2025"] 
+        : ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
 
       const systemPrompt = `
       Anda adalah pakar penganalisis data jadual waktu sekolah (OCR + NLP) yang sangat tepat.
@@ -599,30 +603,62 @@ function AdminPanel({ user, db, appId, teachers, schedules, kelasGanti, ketiadaa
       4. Abaikan garisan kosong atau teks yang tidak relevan.
       `;
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `TEKS JADUAL WAKTU:\n${textToProcess.substring(0, 8000)}` }] }],
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: { responseMimeType: "application/json" }
-        })
-      });
+      let parsedData = null;
+      let lastErrorMessage = "";
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Butiran Ralat API Gemini:", errorData);
-        throw new Error(errorData.error?.message || `Ralat Pelayan HTTP: ${response.status}`);
+      // 3. Loop untuk menguji setiap model API
+      for (const modelName of modelsToTry) {
+        try {
+          console.log(`[Sistem AI] Sedang mencuba model: ${modelName}...`);
+          
+          // Model lama seperti 'gemini-pro' tidak menyokong tetapan baharu, jadi kita tukar bentuk hantaran
+          const isLegacy = modelName === 'gemini-pro';
+          
+          const payload = isLegacy ? {
+            contents: [{ parts: [{ text: systemPrompt + "\n\n--- TEKS JADUAL WAKTU ---\n\n" + textToProcess.substring(0, 8000) }] }]
+          } : {
+            contents: [{ parts: [{ text: `TEKS JADUAL WAKTU:\n${textToProcess.substring(0, 8000)}` }] }],
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            generationConfig: { responseMimeType: "application/json" }
+          };
+
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error?.message || `Ralat Pelayan HTTP: ${response.status}`);
+          }
+
+          const result = await response.json();
+          let rawText = result.candidates[0].content.parts[0].text;
+          
+          // Bersihkan blok 'code' markdown yang mungkin disertakan oleh AI secara tidak sengaja
+          rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+          
+          parsedData = JSON.parse(rawText);
+          
+          console.log(`[Sistem AI] Berjaya menggunakan model: ${modelName}`);
+          break; // Jika berjaya, terus keluar dari loop dan simpan data
+          
+        } catch (e) {
+          console.warn(`[Sistem AI] Model ${modelName} gagal: ${e.message}`);
+          lastErrorMessage = e.message; // Simpan mesej ralat untuk dipaparkan jika semua model gagal
+        }
       }
 
-      const result = await response.json();
-      const rawJsonText = result.candidates[0].content.parts[0].text;
-      const parsedData = JSON.parse(rawJsonText);
-      
+      // 4. Periksa jika semua percubaan gagal
+      if (!parsedData) {
+        throw new Error(lastErrorMessage || "Kesemua percubaan model AI telah ditolak oleh Google.");
+      }
+
       setParseResult(parsedData);
+      
     } catch (err) {
-      console.error("Ralat penuh:", err);
-      // Paparkan mesej ralat sebenar di skrin!
+      console.error("Ralat penuh AI:", err);
       setErrorMsg("Ralat AI: " + (err.message || "Terdapat ralat teknikal."));
     } finally {
       setIsProcessing(false);

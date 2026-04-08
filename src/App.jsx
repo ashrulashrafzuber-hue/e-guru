@@ -187,13 +187,13 @@ export default function App() {
   const getStatusColor = (status) => {
     if (status === 'Mengajar') return 'bg-green-100 text-green-700 border-green-200';
     if (status === 'Rehat / Tiada Kelas') return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-    if (status === 'Tidak Hadir') return 'bg-red-100 text-red-700 border-red-200';
+    if (status === 'Tidak Hadir' || status.includes('Cuti')) return 'bg-red-100 text-red-700 border-red-200';
     return 'bg-blue-100 text-blue-700 border-blue-200'; // Untuk Cuti/Mesyuarat dll
   };
 
   const getStatusIcon = (status) => {
     if (status === 'Mengajar') return <CheckCircle className="w-4 h-4 mr-1" />;
-    if (status === 'Tidak Hadir') return <XCircle className="w-4 h-4 mr-1" />;
+    if (status === 'Tidak Hadir' || status.includes('Cuti')) return <XCircle className="w-4 h-4 mr-1" />;
     return <AlertCircle className="w-4 h-4 mr-1" />;
   };
 
@@ -203,7 +203,7 @@ export default function App() {
     teachers.forEach(t => {
       const { status } = getTeacherLiveStatus(t);
       if (status === 'Mengajar') mengajar++;
-      else if (status === 'Tidak Hadir') tidakHadir++;
+      else if (status === 'Tidak Hadir' || status.includes('Cuti')) tidakHadir++;
       else rehat++;
     });
     return { total: teachers.length, mengajar, rehat, tidakHadir };
@@ -343,7 +343,7 @@ export default function App() {
                           onClick={() => setSelectedTeacher(teacher)}
                           className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden group"
                         >
-                          <div className={`absolute top-0 left-0 w-1.5 h-full ${liveData.status === 'Mengajar' ? 'bg-green-500' : liveData.status === 'Tidak Hadir' ? 'bg-red-500' : 'bg-yellow-500'}`}></div>
+                          <div className={`absolute top-0 left-0 w-1.5 h-full ${liveData.status === 'Mengajar' ? 'bg-green-500' : liveData.status === 'Tidak Hadir' || liveData.status.includes('Cuti') ? 'bg-red-500' : 'bg-yellow-500'}`}></div>
                           
                           <div className="flex justify-between items-start mb-3 pl-2">
                             <div>
@@ -562,8 +562,9 @@ function AdminPanel({ user, db, appId, teachers, schedules, kelasGanti, ketiadaa
         if (typeof __app_id !== 'undefined') isPreviewEnv = true;
       } catch(e) {}
       
-      const apiKey = isPreviewEnv ? "" : "AIzaSyAbyj3Kkvw_zaWBUYbpN0DPIA0XO2oBNsk"; 
-      const modelName = isPreviewEnv ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+      // KUNCI API TERKINI
+      const apiKey = "AIzaSyCwzFj3tlVEgo-SZj_DSdaV1cezQlImZbg"; 
+      const modelName = "gemini-1.5-flash";
 
       const systemPrompt = `Anda adalah pakar penganalisis data jadual waktu sekolah (OCR + NLP) yang sangat tepat.
 Teks di bawah adalah data jadual waktu sekolah.
@@ -896,7 +897,7 @@ PANDUAN PENTING UNTUK KETEPATAN:
                     ) : (
                       <div>
                         <p className="text-gray-700 font-medium mb-1">Klik atau seret fail PDF ke sini</p>
-                        <p className="text-sm text-gray-400">Sokong format jadual standard sekolah</p>
+                        <p className="text-sm text-gray-400">Menyokong format jadual standard sekolah</p>
                         <button className="mt-4 px-4 py-2 bg-indigo-50 text-indigo-700 font-medium rounded-lg pointer-events-none">
                           Pilih Fail PDF
                         </button>
@@ -1029,7 +1030,7 @@ function ReliefManager({ user, db, appId, teachers, schedules, kelasGanti, ketia
         });
       }
     } catch (e) {
-      console.error("Error saving relief", e);
+      console.error("Ralat semasa menyimpan kelas ganti", e);
     }
   };
 

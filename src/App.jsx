@@ -549,7 +549,7 @@ function AdminPanel({ user, db, appId, teachers, schedules, kelasGanti, ketiadaa
   const [uploadMethod, setUploadMethod] = useState('pdf'); // 'pdf' | 'text'
   const [manualText, setManualText] = useState('');
 
-  // --- KOD AI GEMINI YANG DIKONGSI BERSAMA (PDF & TEKS) DENGAN SISTEM AUTO-FALLBACK ---
+  // --- KOD AI GEMINI YANG DIKONGSI BERSAMA (PDF & TEKS) ---
   const processWithAI = async (textToProcess) => {
     setIsProcessing(true);
     setErrorMsg('');
@@ -563,99 +563,68 @@ function AdminPanel({ user, db, appId, teachers, schedules, kelasGanti, ketiadaa
       } catch(e) {}
       
       const apiKey = isPreviewEnv ? "" : "AIzaSyAbyj3Kkvw_zaWBUYbpN0DPIA0XO2oBNsk"; 
-      
-      // 2. Senarai model untuk diuji. Jika satu gagal, ia akan beralih ke model seterusnya.
-      const modelsToTry = isPreviewEnv 
-        ? ["gemini-2.5-flash-preview-09-2025"] 
-        : ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
+      const modelName = isPreviewEnv ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
 
-      const systemPrompt = `
-      Anda adalah pakar penganalisis data jadual waktu sekolah (OCR + NLP) yang sangat tepat.
-      Teks di bawah adalah data jadual waktu sekolah.
-      
-      TUGAS ANDA:
-      Baca teks tersebut, fahami lajur masa (cth: 07:30 - 08:00) dan baris hari (cth: Isnin, Selasa).
-      Kenal pasti nama guru dan subjek utama mereka.
-      Bina rekod jadual berstruktur bagi setiap kelas yang diajar. Abaikan waktu rehat (REHAT) atau perhimpunan jika tiada kelas spesifik.
-      
-      FORMAT OUTPUT (JSON SAHAJA Tanpa backticks markdown):
-      {
-        "guru": [
-          {"nama": "Nama Penuh Guru (Cari di bahagian atas jadual atau footer)", "subjek": "Subjek Dominan"}
-        ],
-        "jadual": [
-          {
-            "guru_nama": "Mesti padan tepat dengan nama di atas",
-            "hari": "Isnin/Selasa/Rabu/Khamis/Jumaat", 
-            "masa_mula": "HH:mm (format 24-jam, cth: 07:30)", 
-            "masa_tamat": "HH:mm (format 24-jam, cth: 08:30)", 
-            "kelas": "Nama Kelas (cth: 5 AMANAH)", 
-            "subjek": "Nama Subjek (cth: MATEMATIK)", 
-            "lokasi": "Bilik Darjah / Makmal / Padang (Letak 'Bilik Darjah' jika tidak pasti)"
-          }
-        ]
-      }
-      
-      PANDUAN PENTING UNTUK KETEPATAN:
-      1. Jika sel mengandungi cantuman Kelas & Subjek (cth: "5 AMANAH MATEMATIK" atau "5A / MT"), pisahkan dengan bijak.
-      2. Gabungkan slot masa yang berturutan untuk subjek dan kelas yang sama.
-      3. Singkatan hari: ISN=Isnin, SEL=Selasa, RAB=Rabu, KHA=Khamis, JUM=Jumaat.
-      4. Abaikan garisan kosong atau teks yang tidak relevan.
-      `;
+      const systemPrompt = `Anda adalah pakar penganalisis data jadual waktu sekolah (OCR + NLP) yang sangat tepat.
+Teks di bawah adalah data jadual waktu sekolah.
 
-      let parsedData = null;
-      let lastErrorMessage = "";
+TUGAS ANDA:
+Baca teks tersebut, fahami lajur masa (cth: 07:30 - 08:00) dan baris hari (cth: Isnin, Selasa).
+Kenal pasti nama guru dan subjek utama mereka.
+Bina rekod jadual berstruktur bagi setiap kelas yang diajar. Abaikan waktu rehat (REHAT) atau perhimpunan jika tiada kelas spesifik.
 
-      // 3. Loop untuk menguji setiap model API
-      for (const modelName of modelsToTry) {
-        try {
-          console.log(`[Sistem AI] Sedang mencuba model: ${modelName}...`);
-          
-          // Model lama seperti 'gemini-pro' tidak menyokong tetapan baharu, jadi kita tukar bentuk hantaran
-          const isLegacy = modelName === 'gemini-pro';
-          
-          const payload = isLegacy ? {
-            contents: [{ parts: [{ text: systemPrompt + "\n\n--- TEKS JADUAL WAKTU ---\n\n" + textToProcess.substring(0, 8000) }] }]
-          } : {
-            contents: [{ parts: [{ text: `TEKS JADUAL WAKTU:\n${textToProcess.substring(0, 8000)}` }] }],
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            generationConfig: { responseMimeType: "application/json" }
-          };
+FORMAT OUTPUT (JSON SAHAJA Tanpa backticks markdown):
+{
+  "guru": [
+    {"nama": "Nama Penuh Guru (Cari di bahagian atas jadual atau footer)", "subjek": "Subjek Dominan"}
+  ],
+  "jadual": [
+    {
+      "guru_nama": "Mesti padan tepat dengan nama di atas",
+      "hari": "Isnin/Selasa/Rabu/Khamis/Jumaat", 
+      "masa_mula": "HH:mm (format 24-jam, cth: 07:30)", 
+      "masa_tamat": "HH:mm (format 24-jam, cth: 08:30)", 
+      "kelas": "Nama Kelas (cth: 5 AMANAH)", 
+      "subjek": "Nama Subjek (cth: MATEMATIK)", 
+      "lokasi": "Bilik Darjah / Makmal / Padang (Letak 'Bilik Darjah' jika tidak pasti)"
+    }
+  ]
+}
 
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
+PANDUAN PENTING UNTUK KETEPATAN:
+1. Jika sel mengandungi cantuman Kelas & Subjek (cth: "5 AMANAH MATEMATIK" atau "5A / MT"), pisahkan dengan bijak.
+2. Gabungkan slot masa yang berturutan untuk subjek dan kelas yang sama.
+3. Singkatan hari: ISN=Isnin, SEL=Selasa, RAB=Rabu, KHA=Khamis, JUM=Jumaat.
+4. Abaikan garisan kosong atau teks yang tidak relevan.`;
 
-          if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.error?.message || `Ralat Pelayan HTTP: ${response.status}`);
-          }
+      // KITA GABUNGKAN ARAHAN DAN TEKS MENJADI SATU
+      // Ini akan menyelesaikan isu 'payload not supported' untuk versi API tertentu
+      const fullPrompt = `${systemPrompt}\n\n--- TEKS JADUAL WAKTU ---\n${textToProcess.substring(0, 8000)}`;
 
-          const result = await response.json();
-          let rawText = result.candidates[0].content.parts[0].text;
-          
-          // Bersihkan blok 'code' markdown yang mungkin disertakan oleh AI secara tidak sengaja
-          rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-          
-          parsedData = JSON.parse(rawText);
-          
-          console.log(`[Sistem AI] Berjaya menggunakan model: ${modelName}`);
-          break; // Jika berjaya, terus keluar dari loop dan simpan data
-          
-        } catch (e) {
-          console.warn(`[Sistem AI] Model ${modelName} gagal: ${e.message}`);
-          lastErrorMessage = e.message; // Simpan mesej ralat untuk dipaparkan jika semua model gagal
-        }
+      console.log(`[Sistem AI] Menghantar data ke model: ${modelName}`);
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error?.message || `Ralat Pelayan HTTP: ${response.status}`);
       }
 
-      // 4. Periksa jika semua percubaan gagal
-      if (!parsedData) {
-        throw new Error(lastErrorMessage || "Kesemua percubaan model AI telah ditolak oleh Google.");
-      }
-
-      setParseResult(parsedData);
+      const result = await response.json();
+      let rawText = result.candidates[0].content.parts[0].text;
+      
+      // Bersihkan blok 'code' markdown jika ada
+      rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+      
+      setParseResult(JSON.parse(rawText));
+      console.log(`[Sistem AI] Berjaya diekstrak!`);
       
     } catch (err) {
       console.error("Ralat penuh AI:", err);

@@ -28,7 +28,17 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'teacher-dashboard-id';
+
+// Semak ID Aplikasi secara selamat
+const getAppId = () => {
+  try {
+    if (typeof __app_id !== 'undefined') return __app_id;
+  } catch (e) {
+    // Abaikan jika tiada dalam Vercel
+  }
+  return 'teacher-dashboard-id';
+};
+const appId = getAppId();
 
 // --- HELPER UNTUK HARI INI ---
 const DAYS = ['Ahad', 'Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat', 'Sabtu'];
@@ -546,9 +556,12 @@ function AdminPanel({ user, db, appId, teachers, schedules, kelasGanti, ketiadaa
     setParseResult(null);
 
     try {
-      // --- AUTODETECT PERSEKITARAN ---
-      // Sistem kenal pasti sama ada ia diuji di skrin ini (Canvas) atau di Internet (Vercel)
-      const isPreviewEnv = typeof __app_id !== 'undefined';
+      // --- AUTODETECT PERSEKITARAN SECARA SELAMAT ---
+      let isPreviewEnv = false;
+      try {
+        if (typeof __app_id !== 'undefined') isPreviewEnv = true;
+      } catch(e) {}
+      
       const apiKey = isPreviewEnv ? "" : "AIzaSyAbyj3Kkvw_zaWBUYbpN0DPIA0XO2oBNsk"; 
       const modelName = isPreviewEnv ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
 
@@ -599,7 +612,7 @@ function AdminPanel({ user, db, appId, teachers, schedules, kelasGanti, ketiadaa
       if (!response.ok) {
         const errorData = await response.json();
         console.error("Butiran Ralat API Gemini:", errorData);
-        throw new Error(errorData.error?.message || "Ralat Pelayan Gemini.");
+        throw new Error(errorData.error?.message || `Ralat Pelayan HTTP: ${response.status}`);
       }
 
       const result = await response.json();
@@ -609,7 +622,8 @@ function AdminPanel({ user, db, appId, teachers, schedules, kelasGanti, ketiadaa
       setParseResult(parsedData);
     } catch (err) {
       console.error("Ralat penuh:", err);
-      setErrorMsg("Gagal memproses data dengan AI. Sila pastikan teks jadual tidak terlalu panjang.");
+      // Paparkan mesej ralat sebenar di skrin!
+      setErrorMsg("Ralat AI: " + (err.message || "Terdapat ralat teknikal."));
     } finally {
       setIsProcessing(false);
     }
